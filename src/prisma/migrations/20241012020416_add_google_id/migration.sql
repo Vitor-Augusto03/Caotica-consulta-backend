@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE `user` MODIFY `senha` VARCHAR(191) NULL,
+    MODIFY `cpf` VARCHAR(191) NULL,
+    MODIFY `googleId` VARCHAR(191) NULL;
