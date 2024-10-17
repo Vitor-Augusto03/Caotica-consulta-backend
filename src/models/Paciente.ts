@@ -2,7 +2,7 @@
 import { PrismaClient, Paciente as PacienteModel } from '@prisma/client';
 
 export class Paciente {
-  private prisma: PrismaClient;
+  prisma: PrismaClient;
 
   constructor() {
     this.prisma = new PrismaClient();

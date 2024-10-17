@@ -1,17 +1,18 @@
 // src/controllers/agendamentosController.ts
-import { Request, Response, Express } from 'express';
+import { Request, Response, Express} from 'express';
 import { getUser } from '../auth_utils';
 import { PrismaClient } from '@prisma/client';
 
+const prisma = new PrismaClient();
 async function agendarConsulta(req: Request, res: Response, prisma: PrismaClient) {
-    const { data, horario, medicoId, cpf, status } = req.body;
+    const { data, horario, medicoId, cpf, status, nome } = req.body;
 
+    // Verifica se todos os campos obrigatórios foram fornecidos
     if (!status) {
         return res.status(400).json({ error: 'O status é obrigatório' });
     }
 
-    // Verifica se o usuário está autenticado
-    const user = await getUser(req, res, prisma); // Adicionando prisma aqui
+    const user = await getUser(req, res, prisma);
     if (!user) {
         return res.status(401).json({ error: 'Usuário não autenticado' });
     }
@@ -20,20 +21,49 @@ async function agendarConsulta(req: Request, res: Response, prisma: PrismaClient
         return res.status(400).json({ error: 'O CPF do paciente é obrigatório' });
     }
 
+    if (!nome) {
+        return res.status(400).json({ error: 'O nome do paciente é obrigatório' });
+    }
+
+    // Verificação do formato do horário
+    const horarioRegex = /^([01]\d|2[0-3]):([0-5]\d)$/; // Formato HH:mm
+    if (!horarioRegex.test(horario)) {
+        return res.status(400).json({ error: 'O horário deve estar no formato HH:mm' });
+    }
+
     try {
+        // Log para verificar o horário recebido
+        console.log("Horário recebido:", horario);
+
         let paciente = await prisma.paciente.findUnique({
             where: { cpf },
         });
 
         if (!paciente) {
-            return res.status(404).json({ error: 'Paciente não encontrado' });
+            paciente = await prisma.paciente.create({
+                data: {
+                    nome,
+                    cpf,
+                },
+            });
         }
+
+        // Conversão da data para o formato ISO
+        const dataISO = new Date(data).toISOString();
+        
+        // Verifica se a data é válida
+        if (isNaN(new Date(dataISO).getTime())) {
+            return res.status(400).json({ error: 'A data fornecida é inválida' });
+        }
+
+        // Log para verificar a data convertida
+        console.log("Data convertida para ISO:", dataISO);
 
         // Verifica se já existe um agendamento para o médico na data e horário especificados
         const agendamentoExistente = await prisma.agendamento.findFirst({
             where: {
                 medicoId,
-                data,
+                data: dataISO,
                 horario,
             },
         });
@@ -44,7 +74,7 @@ async function agendarConsulta(req: Request, res: Response, prisma: PrismaClient
 
         const agendamento = await prisma.agendamento.create({
             data: {
-                data,
+                data: dataISO,
                 horario,
                 usuarioId: user.id,
                 pacienteId: paciente.id,
@@ -52,12 +82,16 @@ async function agendarConsulta(req: Request, res: Response, prisma: PrismaClient
                 status,
             },
         });
+
         return res.status(201).json(agendamento);
     } catch (error) {
-        console.error(error);
-        return res.status(400).json({ error: 'Erro ao agendar consulta' });
+        console.error("Erro ao agendar consulta:", error);
+        console.error("Dados recebidos:", { data, horario, medicoId, cpf, status, nome });
+        const errorMessage = (error as Error).message || 'Erro desconhecido';
+        return res.status(500).json({ error: 'Erro ao agendar consulta', details: errorMessage });
     }
 }
+
 
 
 async function cancelarAgendamento(req: Request, res: Response, prisma: PrismaClient) {

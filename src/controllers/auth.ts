@@ -3,7 +3,7 @@ import { Express } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 
-export const JWT_SECRET = 'segredo do jwt...';
+export const JWT_SECRET = 'sua-chave-secreta';
 
 export function rotasAuth(app: Express, prisma: PrismaClient) {
     app.post('/auth/signin', async function (req: any, res: any) {
@@ -29,17 +29,19 @@ export function rotasAuth(app: Express, prisma: PrismaClient) {
         }
 
         const payload = {
+            id: user.id,     // Incluímos o id do usuário no payload
             email: user.email,
-            cpf: user.cpf,  // Incluímos o cpf no payload
+            cpf: user.cpf,   // Incluímos o cpf no payload
         };
 
-        const token = jwt.sign(payload, JWT_SECRET);
+        // Definindo a expiração do token JWT para 1 hora
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
 
         res.send({
             token,
             email: user.email,
             nome: user.nome,
-            cpf: user.cpf,  // Incluímos o cpf na resposta
+            cpf: user.cpf,   // Incluímos o cpf na resposta
         });
     });
 
