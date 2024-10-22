@@ -7,15 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id           Int           @id @default(autoincrement())
-  nome         String
-  email        String         @unique
-  senha        String?
-  cpf          String?        @unique
-  agendamentos Agendamento[]
-}
-
 model Medico {
   id            Int           @id @default(autoincrement())
   nome          String
@@ -34,13 +25,11 @@ model Agendamento {
   id        Int      @id @default(autoincrement())
   data      DateTime
   horario   String
-  usuarioId Int      // ID do Usuário que está agendando
   medicoId  Int      // ID do Médico que está sendo agendado
   pacienteId Int      // ID do Paciente que está sendo agendado
   status    Status
   medico    Medico   @relation(fields: [medicoId], references: [id])
-  usuario   User     @relation(fields: [usuarioId], references: [id])
-  paciente  Paciente @relation(fields: [pacienteId], references: [id], map: "Agendamento_pacienteId_fkey") // Definindo um campo diferente para o paciente e um nome de chave única
+  paciente  Paciente @relation(fields: [pacienteId], references: [id])
 }
 
 enum Status {

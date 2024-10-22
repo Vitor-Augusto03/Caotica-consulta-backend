@@ -1,20 +1,15 @@
 // src/controllers/agendamentosController.ts
-import { Request, Response, Express} from 'express';
-import { getUser } from '../auth_utils';
-import { PrismaClient } from '@prisma/client';
+import { Request, Response, Express } from 'express';
+import { PrismaClient, Status } from '@prisma/client';
 
 const prisma = new PrismaClient();
+
 async function agendarConsulta(req: Request, res: Response, prisma: PrismaClient) {
     const { data, horario, medicoId, cpf, status, nome } = req.body;
 
-    // Verifica se todos os campos obrigatórios foram fornecidos
+    // Validações de campos obrigatórios
     if (!status) {
         return res.status(400).json({ error: 'O status é obrigatório' });
-    }
-
-    const user = await getUser(req, res, prisma);
-    if (!user) {
-        return res.status(401).json({ error: 'Usuário não autenticado' });
     }
 
     if (!cpf) {
@@ -25,46 +20,31 @@ async function agendarConsulta(req: Request, res: Response, prisma: PrismaClient
         return res.status(400).json({ error: 'O nome do paciente é obrigatório' });
     }
 
-    // Verificação do formato do horário
-    const horarioRegex = /^([01]\d|2[0-3]):([0-5]\d)$/; // Formato HH:mm
+    // Valida o formato do horário
+    const horarioRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
     if (!horarioRegex.test(horario)) {
         return res.status(400).json({ error: 'O horário deve estar no formato HH:mm' });
     }
 
     try {
-        // Log para verificar o horário recebido
-        console.log("Horário recebido:", horario);
-
-        let paciente = await prisma.paciente.findUnique({
-            where: { cpf },
-        });
-
+        // Verifica se o paciente existe, caso contrário, cria um novo
+        let paciente = await prisma.paciente.findUnique({ where: { cpf } });
         if (!paciente) {
-            paciente = await prisma.paciente.create({
-                data: {
-                    nome,
-                    cpf,
-                },
-            });
+            paciente = await prisma.paciente.create({ data: { nome, cpf } });
         }
 
-        // Conversão da data para o formato ISO
+        // Valida a data
         const dataISO = new Date(data).toISOString();
-        
-        // Verifica se a data é válida
         if (isNaN(new Date(dataISO).getTime())) {
             return res.status(400).json({ error: 'A data fornecida é inválida' });
         }
 
-        // Log para verificar a data convertida
-        console.log("Data convertida para ISO:", dataISO);
-
-        // Verifica se já existe um agendamento para o médico na data e horário especificados
+        // Verifica se já existe um agendamento para o médico no horário
         const agendamentoExistente = await prisma.agendamento.findFirst({
-            where: {
-                medicoId,
-                data: dataISO,
-                horario,
+            where: { 
+                medicoId: Number(medicoId), // Converte para número
+                data: dataISO, 
+                horario 
             },
         });
 
@@ -72,14 +52,18 @@ async function agendarConsulta(req: Request, res: Response, prisma: PrismaClient
             return res.status(400).json({ error: 'Horário já está agendado para este médico' });
         }
 
+        // Cria o novo agendamento
         const agendamento = await prisma.agendamento.create({
             data: {
                 data: dataISO,
                 horario,
-                usuarioId: user.id,
                 pacienteId: paciente.id,
-                medicoId,
+                medicoId: Number(medicoId), // Converte para número
                 status,
+            },
+            include: {
+                paciente: { select: { nome: true } },
+                medico: { select: { nome: true, especialidade: true } },
             },
         });
 
@@ -87,33 +71,24 @@ async function agendarConsulta(req: Request, res: Response, prisma: PrismaClient
     } catch (error) {
         console.error("Erro ao agendar consulta:", error);
         console.error("Dados recebidos:", { data, horario, medicoId, cpf, status, nome });
-        const errorMessage = (error as Error).message || 'Erro desconhecido';
-        return res.status(500).json({ error: 'Erro ao agendar consulta', details: errorMessage });
+        return res.status(500).json({ error: 'Erro ao agendar consulta', details: (error as Error).message });
     }
 }
-
-
 
 async function cancelarAgendamento(req: Request, res: Response, prisma: PrismaClient) {
     const { id } = req.params;
 
-    const user = await getUser(req, res, prisma); // Adicionando prisma aqui
-    if (!user) {
-        return res.status(401).json({ error: 'Usuário não autenticado' });
-    }
-
-    const usuarioId = user.id;
-
     try {
-        const agendamento = await prisma.agendamento.findUnique({
-            where: { id: Number(id) },
-        });
-
-        if (!agendamento || agendamento.usuarioId !== usuarioId) {
-            return res.status(403).json({ error: 'Acesso não permitido' });
+        const agendamento = await prisma.agendamento.findUnique({ where: { id: Number(id) } });
+        if (!agendamento) {
+            return res.status(404).json({ error: 'Agendamento não encontrado' });
         }
 
-        await prisma.agendamento.delete({ where: { id: Number(id) } });
+        // Atualiza o status do agendamento para "Cancelado"
+        await prisma.agendamento.update({
+            where: { id: Number(id) },
+            data: { status: "Cancelado" }
+        });
 
         return res.json({ message: 'Agendamento cancelado com sucesso!' });
     } catch (error) {
@@ -122,22 +97,18 @@ async function cancelarAgendamento(req: Request, res: Response, prisma: PrismaCl
     }
 }
 
-async function listarAgendamentos(req: Request, res: Response, prisma: PrismaClient) {
-    const user = await getUser(req, res, prisma); 
-    if (!user) {
-        return res.status(401).json({ error: 'Usuário não autenticado' });
-    }
 
-    const usuarioId = user.id;
+async function listarAgendamentos(req: Request, res: Response, prisma: PrismaClient) {
+    const { status } = req.query;
 
     try {
         const agendamentos = await prisma.agendamento.findMany({
             where: {
-                usuarioId,
-                status: 'Confirmado', // Filtrando apenas agendamentos confirmados
+                ...(status && { status: status as Status }), // Cast para o tipo correto
             },
             include: {
-                medico: true,
+                medico: { select: { nome: true, especialidade: true } },
+                paciente: { select: { nome: true, cpf: true } },
             },
         });
 
@@ -157,12 +128,13 @@ export function rotasAgendamentosController(app: Express, prisma: PrismaClient) 
         });
     });
 
-    app.delete('/api/agendamentos/:id', (req: Request, res: Response) => {
+    app.patch('/api/agendamentos/:id', (req: Request, res: Response) => {
         cancelarAgendamento(req, res, prisma).catch(err => {
             console.error(err);
             res.status(500).json({ error: 'Erro interno do servidor' });
         });
     });
+    
 
     app.get('/api/agendamentos', (req: Request, res: Response) => {
         listarAgendamentos(req, res, prisma).catch(err => {
