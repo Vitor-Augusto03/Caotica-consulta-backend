@@ -7,29 +7,39 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Especialidade {
+  id           Int           @id @default(autoincrement())
+  nome         String
+  medico       Medico[] // Relacionamento com os médicos
+  agendamentos Agendamento[] // Relacionamento com os agendamentos
+}
+
 model Medico {
-  id            Int           @id @default(autoincrement())
-  nome          String
-  especialidade String
-  agendamentos  Agendamento[]
+  id              Int           @id @default(autoincrement())
+  nome            String
+  especialidadeId Int
+  especialidade   Especialidade @relation(fields: [especialidadeId], references: [id])
+  agendamentos    Agendamento[] // Relacionamento com os agendamentos
 }
 
 model Paciente {
   id           Int           @id @default(autoincrement())
   nome         String
-  cpf          String         @unique
-  agendamentos Agendamento[]
+  cpf          String        @unique
+  agendamentos Agendamento[] // Relacionamento com os agendamentos
 }
 
 model Agendamento {
-  id        Int      @id @default(autoincrement())
-  data      DateTime
-  horario   String
-  medicoId  Int      // ID do Médico que está sendo agendado
-  pacienteId Int      // ID do Paciente que está sendo agendado
-  status    Status
-  medico    Medico   @relation(fields: [medicoId], references: [id])
-  paciente  Paciente @relation(fields: [pacienteId], references: [id])
+  id              Int           @id @default(autoincrement())
+  data            DateTime
+  horario         String
+  medicoId        Int // ID do médico que está sendo agendado
+  pacienteId      Int // ID do paciente que está sendo agendado
+  status          Status // Status do agendamento
+  medico          Medico        @relation(fields: [medicoId], references: [id])
+  paciente        Paciente      @relation(fields: [pacienteId], references: [id])
+  especialidade   Especialidade @relation(fields: [especialidadeId], references: [id]) // Adicionando relação explícita
+  especialidadeId Int
 }
 
 enum Status {

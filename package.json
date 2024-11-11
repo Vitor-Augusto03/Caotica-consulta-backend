@@ -14,7 +14,8 @@
     "firebase-admin": "^12.6.0",
     "google-auth-library": "^9.14.1",
     "joi": "^17.13.3",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.4"
   },
   "scripts": {
     "start": "node dist/index.js",
