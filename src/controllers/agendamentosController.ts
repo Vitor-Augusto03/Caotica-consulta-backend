@@ -9,7 +9,7 @@ async function agendarConsulta(
   res: Response,
   prisma: PrismaClient
 ) {
-  const { data, horario, medicoId, cpf, status, nome } = req.body;
+  const { data, horario, medicoId, cpf, status, nome, especialidadeId } = req.body;
 
   // Validações de campos obrigatórios
   if (!status) {
@@ -70,7 +70,12 @@ async function agendarConsulta(
       return res.status(400).json({ error: "Médico não encontrado" });
     }
 
-    const especialidadeId = medico.especialidadeId;
+    // Verifica se a especialidade do médico corresponde à especialidade informada no agendamento
+    if (especialidadeId && especialidadeId !== medico.especialidadeId) {
+      return res.status(400).json({
+        error: "A especialidade do médico não corresponde à especialidade informada para o agendamento",
+      });
+    }
 
     // Cria o novo agendamento
     const agendamento = await prisma.agendamento.create({
@@ -80,7 +85,7 @@ async function agendarConsulta(
         pacienteId: paciente.id,
         medicoId: Number(medicoId), // Converte para número
         status,
-        especialidadeId
+        especialidadeId: medico.especialidadeId, // Confere a especialidade do médico
       },
       include: {
         paciente: { select: { nome: true } },
@@ -98,7 +103,8 @@ async function agendarConsulta(
       cpf,
       status,
       nome,
-      });
+      especialidadeId,
+    });
     return res
       .status(500)
       .json({
@@ -107,6 +113,7 @@ async function agendarConsulta(
       });
   }
 }
+
 
 async function cancelarAgendamento(
   req: Request,
